@@ -1,0 +1,143 @@
+function digit_gui(net)
+
+% 先运行：load mycnn_model.mat
+% 再运行：digit_gui(net)
+
+fig = figure('Name','手写数字识别','Position',[300,150,520,680]);
+fig.Color = [0.08 0.08 0.12];
+fig.MenuBar = 'none';
+fig.ToolBar = 'none';
+
+% -------------------- 顶部结果卡片面板 --------------------
+result_text = uicontrol(fig,'Style','text',...
+    'String','Top1:--(--)\nTop2:--(--)\nTop3:--(--)',...
+    'ForegroundColor',[0.95 0.95 1],...
+    'BackgroundColor',[0.15 0.15 0.22],...
+    'Units','normalized',...
+    'Position',[0.04 0.88 0.92 0.105],...
+    'FontSize',13,'HorizontalAlignment','Center',...
+    'FontWeight','bold',...
+    'Max',2);  
+
+% -------------------- 黑色手写画布 --------------------
+ax = axes('Parent',fig,'Units','normalized','Position',[0.05 0.28 0.90 0.59]);
+ax.Color = [0 0 0];
+ax.XColor = [0.3 0.45 0.7];
+ax.YColor = [0.3 0.45 0.7];
+ax.LineWidth =1.2;
+ax.XTick = [];
+ax.YTick = [];
+axis(ax,[0 1 0 1]);
+axis off;
+hold(ax,'on');
+
+% -------------------- 按钮 --------------------
+% 识别按钮
+uicontrol(fig,'Style','pushbutton','String','识别',...
+    'Units','normalized','Position',[0.05 0.08 0.28 0.11],...
+    'FontSize',12,'FontWeight','bold',...
+    'ForegroundColor','w','BackgroundColor',[0.22 0.45 0.75],...
+    'Callback',{@cb_recognize,net});
+
+% 清空按钮
+uicontrol(fig,'Style','pushbutton','String','清空',...
+    'Units','normalized','Position',[0.38 0.08 0.28 0.11],...
+    'FontSize',12,'FontWeight','bold',...
+    'ForegroundColor','w','BackgroundColor',[0.60 0.35 0.20],...
+    'Callback',@cb_clear);
+
+% 退出按钮
+uicontrol(fig,'Style','pushbutton','String','退出',...
+    'Units','normalized','Position',[0.71 0.08 0.24 0.11],...
+    'FontSize',12,'FontWeight','bold',...
+    'ForegroundColor','w','BackgroundColor',[0.20 0.50 0.35],...
+    'Callback',@cb_exit);
+
+% 绘图状态
+mouse_down = false;
+last_x = [];
+last_y = [];
+
+% 鼠标事件
+set(fig,'WindowButtonDownFcn',@mouse_press);
+set(fig,'WindowButtonMotionFcn',@mouse_move);
+set(fig,'WindowButtonUpFcn',@mouse_release);
+
+    function mouse_press(~,~)
+        mouse_down = true;
+        pt = get(ax,'CurrentPoint');
+        last_x = pt(1,1);
+        last_y = pt(1,2);
+    end
+
+    function mouse_move(~,~)
+        if ~mouse_down
+            return;
+        end
+        pt = get(ax,'CurrentPoint');
+        cx = pt(1,1);
+        cy = pt(1,2);
+
+        N = 12;
+        xx = linspace(last_x, cx, N);
+        yy = linspace(last_y, cy, N);
+        plot(ax, xx, yy, 'w', 'LineWidth', 22);
+
+        last_x = cx;
+        last_y = cy;
+    end
+
+    function mouse_release(~,~)
+        mouse_down = false;
+        last_x = [];
+        last_y = [];
+    end
+
+    function cb_clear(~,~)
+        cla(ax);
+        result_text.String = 'Top1:--(--)\nTop2:--(--)\nTop3:--(--)';
+        last_x = [];
+        last_y = [];
+    end
+
+    function cb_recognize(~,~,net)
+        frame = getframe(ax);
+        img_raw = frame.cdata;
+
+        img_gray = rgb2gray(img_raw);
+        img_resized = imresize(img_gray, [28,28]);
+
+       
+        %====调试窗口====
+         %figure;
+         %imshow(img_resized);
+         %title('送入网络的28×28图像');
+        
+
+        [~, score] = classify(net, img_resized);
+        
+        % 获取top3预测
+        [scoreSorted,idxSorted] = sort(score,'descend');
+        cls_cell = cellstr(net.Layers(end).Classes);
+        
+        % 正确：从元胞取出类别字符串转数字0‑9
+        t1_num = str2double(cls_cell{idxSorted(1)});
+        t1_sc = scoreSorted(1);
+        t2_num = str2double(cls_cell{idxSorted(2)});
+        t2_sc = scoreSorted(2);
+        t3_num = str2double(cls_cell{idxSorted(3)});
+        t3_sc = scoreSorted(3);
+        
+        %top3修复
+        outStr = sprintf('Top1:%d(%.3f)\nTop2:%d(%.3f)\nTop3:%d(%.3f)',...
+            t1_num,t1_sc,t2_num,t2_sc,t3_num,t3_sc);
+
+        result_text.String = outStr;
+    end
+
+
+    function cb_exit(~,~)
+        close(fig);
+    end
+
+end
